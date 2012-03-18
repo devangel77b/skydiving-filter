@@ -12,7 +12,7 @@
 
 \usepackage{graphicx}
 \usepackage[usenames,dvipsnames]{color}
-%\usepackage{makeidx} % incompatible with ams art
+%\usepackage{makeidx} % incompatible with amsart
 \usepackage{siunitx}
 \DeclareMathOperator*{\argmin}{\arg\!\min}
 \usepackage{multirow}
@@ -225,9 +225,123 @@ We integrate this by working first with $\omega$ to obtain $\theta$, then using 
 
 
 \section{Real data}
-\subsection{Dealing with GPS coordinates}
+\subsection{GPS coordinates}
+GPS output is given as latitude, longitude, and altitude (i.e. geodetic coordinates) referenced to a standard ellipsoid shape (World Geodetic System 1984, WGS84) \cite{Phillips:2004}.  It is necessary for our purposes to convert it to a Cartesian coordinate system.  One possibility is an Earth-centered, Earth-fixed coordinate frame (ECEF); we will use this as an intermediate step.  The one typically used in navigation problems in ships and aircraft consists of axes forming a right-handed coordinate system pointing north, east, and down ($NED$).  
+
+To convert from geodetic coordinates (latitude $\phi$, longitude $\lambda$, altitude $h$ in \SI{}{\meter} referenced to a WGS84 datum) to ECEF: 
+\begin{equation}
+X = (N(\phi)+h) \cos{\phi} \cos{\lambda}
+\end{equation}
+\begin{equation}
+Y = (N(\phi)+h) \cos{\phi} \sin{\lambda}
+\end{equation}
+\begin{equation}
+Z = (N(\phi)(1-e^2)+h) \sin{\phi}
+\end{equation}
+\begin{equation}
+N(\phi) = \frac{a}{\sqrt{1-e^2 \sin^2{\phi}}}
+\end{equation}
+$X$ passes through the equator at the prime meridian; $Z$ passes through the north pole, and $Y$ passes through the equator at \ang{90}E longitude.  $N(\phi)$ is called the ``normal'' and is the distance from the surface to the $Z$-axis along the ellipsoid normal.  For WGS84 datum, $a=\SI{6378137.0}{\meter}$ is the semi-major axis of the Earth and $e^2=\SI{6.69437999014E-3}{}$ is the first eccentricity squared. 
+
+For our purposes ECEF is not very intuitive so we convert from ECEF to NED referenced to an arbitrary reference position (geodetic position $(\phi_r,\lambda_r,h_r)$, ECEF position $(X_r,Y_r,Z_r)$, taken as any convenient location at the skydiving drop zone. 
+\begin{equation}
+\begin{pmatrix}
+x_N \\ y_E \\ z_D
+\end{pmatrix}
+=
+\begin{pmatrix}
+-\sin{\phi_r}\cos{\lambda_r} & -\sin{\phi_r}\sin{\lambda_r} & \cos{\phi_r} \\
+-\sin{\lambda_r} & \cos{\lambda_r} & 0 \\
+-\cos{\phi_r}\cos{\lambda_r} & -\cos{\phi_r}\sin{\lambda_r} & -\sin{\phi_r}
+\end{pmatrix}
+\begin{pmatrix}
+X-X_r \\
+Y-Y_r \\
+Z-Z_r
+\end{pmatrix}
+\end{equation}
+
+Drop zone geodetic and ECEF positions are given in Table~\ref{table:drop-zones}
+\begin{table}
+\caption{Reference drop zone locations for conversion to $NED$ coordinates.}
+\label{table:drop-zones}
+\begin{center}
+\begin{tabular}{llcc}
+drop zone & location & geodetic position & ECEF position \\
+          &          & $(\phi_r,\lambda_r,h_r)$ & $(X_r,Y_r,Z_r) \SI{}{\meter}$ \\
+Bay Area Skydiving & Byron, CA 	& N\ang{0} W\ang{0} \SI{0}{\meter} & $(0,0,0)$\\
+Skydive Hollister & address 		& N\ang{0} W\ang{0} \SI{0}{\meter} & $(0,0,0)$ \\
+Skydive Napa & address 			& N\ang{0} W\ang{0} \SI{0}{\meter} & $(0,0,0)$\\
+ & Davis, CA 					& N\ang{0} W\ang{0} \SI{0}{\meter} & $(0,0,0)$\\
+Skydive Sacramento & Lincoln, CA & N\ang{0} W\ang{0} \SI{0}{\meter} & $(0,0,0)$\\
+\end{tabular}
+\end{center}
+\end{table}
+
+
 \subsection{Rotations in 3D}
-\subsection{Interpolation issues}
+One method is to use several orthonormal rotation matrix multiplications to accomplish rotations. For example, in computer vision applications, it is typical to convert from world coordinates to camera-fixed spatial coordinates, using a translation $\vec{t}$, followed by rotations about $\hat{z}$ (azimuth), then the new $\hat{y}$ (elevation), then the new new $\hat{x}$ (bank) (in that order) \cite{Bradski:2008}. 
+\begin{equation}
+\mathbf{R_x}(\psi) =
+\begin{pmatrix}
+1 & 0 & 0 \\ 0 & \cos{\psi} & \sin{\psi} \\ 0 & -\sin{\psi} & \cos{\psi}
+\end{pmatrix}
+\end{equation}
+\begin{equation}
+\mathbf{R_y}(\phi) =
+\begin{pmatrix}
+\cos{\phi} & 0 & -\sin{\phi} \\
+0 & 1 & 0 \\
+\sin{\phi} & 0 & \cos{\phi}
+\end{pmatrix}
+\end{equation}
+\begin{equation}
+\mathbf{R_z}(\theta) = 
+\begin{pmatrix}
+\cos{\theta} & \sin{\theta} & 0 \\
+-\sin{\theta} & \cos{\theta} & 0 \\
+0 & 0 & 1
+\end{pmatrix}
+\end{equation}
+\begin{equation}
+\vec{x}_{cam} = 
+\mathbf{R_x R_y R_z}
+(\vec{x}_{world} - \vec{t})
+\end{equation}
+\begin{equation}
+\vec{x}_{cam} = 
+\mathbf{R}
+(\vec{x}_{world} - \vec{t})
+\end{equation}
+The inverse of this operation is given by:
+\begin{equation}
+\vec{x}_{world}
+=
+\mathbf{R}^{-1} \vec{x}_{cam} + \vec{t} 
+\end{equation}
+where
+\begin{equation}
+\mathbf{R}^{-1} =
+\mathbf{R}^T =
+\mathbf{R_z}^T \mathbf{R_y}^T
+\mathbf{R_x}^T
+\end{equation}
+
+Alternatives to this formulation include axis-angle and quaternion methods, which avoid problems at \ang{+-90} pitch angles \cite{Phillips:2004}.  This is often handy, e.g. when integrating inertial sensor data during extreme pitching maneuvers as might be expected during skydiving.
+
+A quaternion is like an extension to the complex numbers with two additional basis vectors $i, j, k$. For our purposes, we will mostly treat it as a real part and a pure imaginary part that looks like a vector.  Furthermore, for a unit quaternion (one with unit magnitude), these two parts may be thought of as representing an axis of rotation and the angle of the rotation.  
+\begin{equation}
+q
+\end{equation}
+
+%\subsection{Interpolation issues}
+
+\section{A full state estimator for the skydiving GPS IMU}
+\subsection{Coordinate systems}
+\subsection{Measurements}
+\subsection{Initial conversions}
+\subsection{Integration for body orientation}
+\subsection{Integration for body position}
 
 \section{Conclusions}
 
